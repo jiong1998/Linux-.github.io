@@ -1,4 +1,5 @@
 # Linux系统编程
+个人通过学习，整理出了一份Linux下系统编程的笔记，包含了文件IO、进程、进程间通信、信号、线程、互斥等知识点，持续更新
 ## Day2
 ### 1. Vim三种工作模式
 Vi有三种基本工作模式: 命令模式、文本输入模式、末行模式。
@@ -177,7 +178,7 @@ PCB中有文件描述符表, **文件描述符表中存放着打开的文件描�
 &emsp;&emsp;强调：文件描述符的作用：通过文件描述符可以找到文件的**inode**, 通过inode可以找到对应的数据块。
 
 ## Day4
-### 1. open、close、read、write、lseek
+### 1. open、close、read、write、lseek、dup、dup2、fcntl
 
 #### 1. open函数
 头文件 #include <fcntl.h>
@@ -203,6 +204,17 @@ pathname参数是要打开或创建的文件名,和fopen一样, pathname既可�
 - O_TRUNC 如果文件已存在, 将其长度截断为为0字节。
 - O_NONBLOCK 对于设备文件, 以O_NONBLOCK方式打开可以做非阻塞I/O(NonblockI/O),非阻塞I/O。
 
+3. mode:一个整数参数，用来指定创建文件的权限，可以为数字，或宏
+	直接写0755
+~~- S_IRWXU:指定创建文件的用户的权限为可读,可写，可执行，等价00700~~ 
+~~- S_IRUSR:指定创建文件的用户的权限为可读，等价00400~~ 
+~~- S_IWUSR:指定创建文件的用户的权限为可写，等价00200~~ 
+~~- S_IXUSR:指定创建文件的用户的权限为可执行，等价00100~~ 
+
+open函数常这么用：
+```cpp
+int fd = open("test.log", O_RDWR | OCREAT, 0755)；
+```
 **1.4 函数返回值:**
 &emsp;&emsp;成功: 返回一个最小且未被占用的文件描述符
 &emsp;&emsp;失败: 返回-1, 并设置errno值.
@@ -248,8 +260,8 @@ ssize_t write(int fd, const void *buf, size_t count);
 
 **4.3 函数参数：**
 - fd: 文件描述符
-- buf: 读上来的数据保存在缓冲区buf中
-- count：**buf中数据的长度**。注意不是buf的大小！
+- buf: 缓冲区，要写入文件或设备的数据
+- count：buf中数据的长度
 
 **4.4 函数返回值:**
 &emsp;&emsp;成功：返回写入的字节数
@@ -274,19 +286,20 @@ SEEK_END：文件结尾位置
 &emsp;&emsp;错误：返回-1并设置errno
 
 #### 6. dup函数
-**函数原型:**
+头文件 <unistd.h>
+**6.1 函数原型:**
 int dup(int oldfd);
 
-**函数描述:**
+**6.2 函数描述:**
 复制的文件描述符。
 当调用dup函数后，oldfd和返回的int变量都指向同一个文件。
 ```cpp
 int newfd = dup(fd);//此时newfd和fd这两个文件描述符都指向同一个文件
 ```
-**函数参数：**
+**6.3 函数参数：**
 - oldfd -要复制的文件描述符
 
-**函数返回值:**
+**6.4 函数返回值:**
 &emsp;&emsp;成功：返回最小且没被占用的文件描述符
 &emsp;&emsp;错误：返回-1并设置errno
 
@@ -294,22 +307,100 @@ int newfd = dup(fd);//此时newfd和fd这两个文件描述符都指向同一个
 
 
 #### 7. dup2函数
-**函数原型:**
+**7.1 函数原型:**
 int dup2(int oldfd, int newfd);
 
-**函数描述:**
+**7.2 函数描述:**
 复制文件描述符
 
-**函数参数：**
+**7.3 函数参数：**
 - oldfd-原来的文件描述符
 - newfd-复制成的新的文件描述符
 
-**函数返回值:**
-&emsp;&emsp;成功：将oldfd复制给newfd, 两个文件描述符指向同一个文件
+**7.4 函数返回值:**
+&emsp;&emsp;成功：返回0。并将oldfd复制给newfd, 两个文件描述符指向同一个文件
 &emsp;&emsp;错误：返回-1并设置errno
 
 假设newfd已经指向了一个文件，首先close原来打开的文件，然后newfd指向oldfd指向的文件.
 若newfd没有被占用，newfd指向oldfd指向的文件.
+
+调用dup2后，内核会修改内部的描述符计数为2。
+
+**7.5 重定向操作:**
+
+dup2可以**实现重定向操作**：意思就是printf的时候可以不把内容输出到终端，而是输出到指定的文件上
+```cpp
+//dup2实现文件重定向操作
+int main(int argc, char * argv[])
+{
+    //打开文件
+    int fd = open(argv[1], O_RDWR | O_CREAT, 0755);
+    if(fd<0)
+    {
+        perror("open error");
+        return -1;
+    }
+    //调用dup2实现文件重定向
+    dup2(fd, STDOUT_FILENO);
+    printf("你好宝贝");
+    return 0;
+}
+```
+
+实现文件重定向原理
+![在这里插入图片描述](https://img-blog.csdnimg.cn/b5cec653bfe14da29f251ca2cfc20f98.png)
+所以当调用dup2时，会把STDOUT_FILENO指向其他文件，所以printf会把内容输出到对应文件。
+
+#### 8. fcntl
+头文件 <fcntl.h>
+**8.1 函数原型:**
+int fcntl(int fd, int cmd, ... /* arg */ );
+
+
+**8.2 函数描述:**
+改变已经打开的文件的属性。用法比较多
+
+**8.3 函数参数：**
+- fd: 文件描述符
+- cmd: 
+-- 若cmd为F_DUPFD, 复制文件描述符, 与dup相同
+-- 若cmd为F_GETFL, 获取文件描述符的flag属性值
+-- 若cmd为 F_SETFL, 设置文件描述符的flag属性
+- /* arg */:可变参数
+
+**8.4 函数返回值:**
+函数返回值:返回值取决于cmd
+- 成功:
+-- 若cmd为F_DUPFD, 返回一个新的文件描述符
+-- 若cmd为F_GETFL, 返回文件描述符的flags值
+-- cmd为 F_SETFL, 返回0
+- 失败返回-1, 并设置errno值.
+
+fcntl函数常用的操作:
+1.  复制一个新的文件描述符:
+int newfd = fcntl(fd, F_DUPFD, 0);
+2. 获取文件的属性标志
+int flag = fcntl(fd, F_GETFL, 0)
+3. 设置文件状态标志
+flag = flag | O_APPEND;
+fcntl(fd, F_SETFL, flag)
+4.  常用的属性标志
+O_APPEND-----设置文件打开为末尾添加
+O_NONBLOCK-----设置打开的文件描述符为非阻塞
+
+fcntl常用函数:
+```cpp
+//获得和设置文件描述符的flag属性: 
+int flag = fcntl(fd, F_GETFL, 0);
+flag |= O_APPEND;//末尾追加
+fcntl(fd, F_SETFL, flag);
+
+//获取和设置文件描述符为非阻塞
+int flags = fcntl(fd[0], F_GETFL, 0); 
+flag |= O_NONBLOCK;//非阻塞
+fcntl(fd[0], F_SETFL, flags);
+
+```
 
 ## Day5（进程）
 ### 1. 程序与进程
@@ -445,7 +536,7 @@ excel("/bin/ls", "ls", "-l", NULL);
 - 参数	------	执行该程序/命令所需要的参数(例如ls的-l)
 - NULL	------	最后这个必须传NULL，否则函数会报错
 
-返回值：若是成功，则不返回，不会再执行exec函数后面的代码；
+返回值：**若是成功，则不返回，不会再执行exec函数后面的代码；**
 若是失败，会执行execl 后面的代码，可以用perror打印错误原因。
 
 #### 7.2 execlp()  
@@ -463,7 +554,7 @@ execlp("ls", "ls", "-l", NULL);
 - 参数	------	执行该程序/命令所需要的参数(例如ls的-l)
 - NULL	------	最后这个必须传NULL，否则函数会报错
 
-返回值：若是成功，则不返回，不会再执行exec函数后面的代码；若是失败，会执行
+返回值：**若是成功，则不返回，不会再执行exec函数后面的代码**；若是失败，会执行
 
 
 ### 8. 子进程资源回收
@@ -543,7 +634,7 @@ Linux环境下，进程地址空间相互独立，每个进程各自有不同的
 - **共享映射区** (无血缘关系)
 - **本地套接字** (最稳定)
 
-### 3. 利用管道的方式进行进程间通信
+### 3. 利用管道的方式进行进程间通信（父子进程之间）
 **管道应用于有血缘关系的进程之间。**
 #### 3.1 管道的概念
 管道是一种最基本的IPC机制，也称匿名管道，应用于**有血缘关系的进程之间**，进行数据传递。调用pipe函数即可创建一个管道。
@@ -592,14 +683,14 @@ int pipe(int fd[2]);
 
 管道创建成功以后，创建该管道的进程（父进程）同时掌握着管道的读端和写端。如何实现父子进程间通信呢？
 
-#### 3.3 父子进程使用管道通信
+#### 3.3 代码实现父子进程使用管道通信
 创建管道通信的步骤：
 1. 父进程**调用pipe函数创建管道**，得到两个文件描述符fd[0]和fd[1]，分别指向管道的读端和写端。
 2. 父进程**调用fork创建子进程**，那么子进程也有两个文件描述符指向同一管。
 3. **父进程关闭管道读端**，**子进程关闭管道写端**。父进程可以向管道中写入数据，子进程将管道中的数据读出，这样就实现了父子进程间通信。
 
-注意 read函数是阻塞函数，如果没有数据，会阻塞到有数据才运行。 
-wirte函数也是阻塞函数，如果数据满了，会阻塞到可以写数据时才运行。
+注意 **管道的读端是阻塞的，如果没有数据，会阻塞到有数据才运行。 
+管道的写端是阻塞的，如果数据满了，会阻塞到可以写数据时才运行。**
 
 ```cpp
 //管道通信的简单案例
@@ -652,6 +743,126 @@ int main() {
     return -1;
 }
 ```
+
+#### 3.4 进程的管道通信执行命令ps aux | grep bash
+在父子进程间完成ps aux | grep bash命令，ps aux在父进程执行，grep bash在子进程执行。
+
+这个代码需要运用到不同的知识点。
+具体需求分析如下：
+- 父子的进程通信，利用pipe
+- 创建进程，利用fork
+- 在父进程中将标准输出重定向管道写端，利用dup2重定向
+- 在子进程中将标准输入重定向管道读端，利用dup2重定向
+- 在父子进程中调用系统命令，利用execlp
+- 父进程回收子进程资源，利用wait
+
+具体重定向分析：
+1. 父进程中执行ps aux，那么命令将会输出到标准输出，但是我们想让他输出到管道的写端，**dup2(fd[1], STDOUT_FILENO)**。**当调用这个函数后，ps aux将不会往标准输出写，而是往管道写端写。**
+2. 子进程执行grep bash，那么该命令将会从标准输入中读数据，但是我们向让他从管道的读端读数据，**dup(fd[0], STDOUT_FILENO)**。
+
+整体流程：
+3. 创建管道pipe
+4. 创建子进程fork
+5. 在父进程中关闭读端fd[0]
+6. 在子进程中关闭写端fd1]
+7. 在父进程中将标准输出重定向到管道的写端
+8. 在子进程中将标准输入重定向到管道的读端
+9. 在父进程中调用execl函数执行ps aux命令
+10. 在子进程中调用execl函数执行grep bash命令
+11. 在父进程中回收子进程wait函致
+
+```cpp
+#include <stdlib.h>
+#include <stdio.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <string.h>
+#include <sys/wait.h>
+#include <sys/fcntl.h>
+
+//实现ps aux|grep bash
+int main() {
+    // 1. 开通管道
+    int fd[2];
+    int result=pipe(fd);
+    if(result<0)
+    {
+        perror("pipe error");
+        return -1;
+    }
+    //2. 创建子进程
+    pid_t pid=fork();
+
+    if(pid<0)
+    {
+        perror("pipe error");
+        return -1;
+    }
+    if(pid>0)//父进程
+    {
+        //父进程关闭读端
+        close(fd[0]);
+        //标准输出重定向到管道写端
+        dup2(fd[1],STDOUT_FILENO);
+        execlp("ps", "ps", "aux", NULL);
+
+        perror("execlp error");//当execlp执行成功，则不会执行后续代码。若执行失败，打印错误
+        wait(NULL);
+    }
+    if(pid==0)//子进程
+    {
+        //子进程关闭写端
+        close(fd[1]);
+        //标准输入重定向到管道读端
+        dup2(fd[0],STDIN_FILENO);
+        execlp("grep","grep","bash", NULL);
+        perror("execlp error");
+    }
+    return 0;
+}
+```
+
+#### 3.5 管道的读写行为详解
+**对于读端而言：**
+- 如果有数据:
+--read正常读，返回读出的数据
+- 如果无数据:
+--若写端 ( close(fd[1]) ) 全部关闭了，read解除阻塞，返回0。
+--若写端没有全部关闭，read阻塞
+
+**对于写端而言：**
+- 若读端全部关闭：管道破裂，进程直接终止，内核给当前进程发送SIGPIPE信号。
+- 若读端没有全部关闭:
+-- 缓冲区如果写满了，write阻塞。
+--缓冲区如果没有满，继续write。
+
+#### 3.6 设置管道为非阻塞
+由之前学的可知，**管道读写两端是默认阻塞的**，可以通过fcntl(fd[0], F_SETFL, flags)函数，将管道的读写两端设置成为非阻塞
+```cpp
+int test1()
+{
+    int fd[2];
+    int result= pipe(fd);
+    if(result<0)
+    {
+        perror("pipe error");
+        return -1;
+    }
+
+    //设置为非阻塞
+    int flags=fcntl(fd[0], F_GETFL,0);
+    flags = flags | O_NONBLOCK;
+    fcntl(fd[0], F_SETFL, flags);
+
+    char buf[100];
+    memset(buf,0x00,sizeof(buf));
+    //此时管道没有写入数据，如果没有设置成非阻塞，进程将一直阻塞在这
+    read(fd[0],buf, sizeof(buf));
+
+    return -1;
+}
+```
+### 4. 利用FIFO的方式进行进程间通信
 ## Day7（信号）
 ### 1. 信号的基本介绍
 进程A给进程B发送信号，进程B收到信号之前执行自己的代码，收到信号后，**不管执行到程序的什么位置，都要暂停运行，去处理信号**，处理完毕后再继续执行。与硬件中断类似——异步模式。但信号是软件层面上实现的中断，早期常被称为“软中断”。
