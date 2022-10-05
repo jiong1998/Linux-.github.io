@@ -1,3 +1,4 @@
+
 # Linux系统编程
 个人通过学习，整理出了一份Linux下系统编程的笔记，包含了文件IO、进程、进程间通信、信号、线程、互斥等知识点，持续更新
 ## Day2
@@ -282,9 +283,7 @@ off_t lseek(int fd, off_t offset, int whence);
 SEEK_END：文件结尾位置
 
 **5.4 函数返回值:**
-&emsp;&emsp;成功：返回写入的字节数
-&emsp;&emsp;错误：返回-1并设置errno
-
+若lseek成功执行, 则返回新的偏移量。
 #### 6. dup函数
 头文件 <unistd.h>
 **6.1 函数原型:**
@@ -443,7 +442,7 @@ fork函数的执行逻辑
 ![在这里插入图片描述](https://img-blog.csdnimg.cn/b83bb96bec6a4a3eb790107373339e37.png)
 
 
-调用fork函数的内核实现原理：除了修改内核区中PCB的进程id外，其他全部复制一份到子进程
+调用fork函数的内核实现原理：除了修改内核区中PCB的进程id外，其他全部复制一份到子进程.(**最重要的是，文件描述符也会一同复制过去**)
 
 ![在这里插入图片描述](https://img-blog.csdnimg.cn/267b29efac2d4ab2a19bd586d67e5a0b.png)
 fork函数总结：
@@ -473,7 +472,7 @@ if(pid>0)//父进程执行的片段
 	yyy;
 }
 ```
-当父进程比子进程先结束时，子进程的父进程pid会变成1
+当父进程比子进程先结束时，子进程的父进程pid会变成1，由init进程进行领养。
 
 #### 5.3 父子进程不能共享全局变量
 如标题所示，原因是：会把父进程的用户区完全copy一份给子进程，所以子进程也有自己的全局变量。而且，如果共享的话，还要**进程间通信**干嘛？
@@ -625,11 +624,11 @@ if(pid==0)//子进程执行
 
 ## Day6（进程间通信）
 ### 1. 进程间通信的基本概念
-Linux环境下，进程地址空间相互独立，每个进程各自有不同的用户地址空间。任何一个进程的全局变量在另一个进程中都看不到，所以进程和进程之间不能相互访问，<font color='red'> 要交换数据必须通过**内核** </font>。具体来说，在内核中开辟一块缓冲区，进程1把数据从用户空间拷到内核缓冲区，进程2再从内核缓冲区把数据读走，内核提供的这种机制称为**进程间通信**（**IPC**，InterProcess Communication）。
+Linux环境下，**进程地址空间相互独立**，**每个进程各自有不同的用户地址空间**。**任何一个进程的全局变量在另一个进程中都看不到**，**所以进程和进程之间不能相互访问**，<font color='red'> 要交换数据必须通过**内核** </font>。具体来说，在内核中开辟一块缓冲区，进程1把数据从用户空间拷到内核缓冲区，进程2再从内核缓冲区把数据读走，内核提供的这种机制称为**进程间通信**（**IPC**，InterProcess Communication）。
 ![在这里插入图片描述](https://img-blog.csdnimg.cn/596a8238029e44cead74021b739fb82e.png)
 ### 2. 进程间通信的方式
 在进程间完成数据传递需要借助操作系统提供特殊的方法,现今常用的进程间通信方式有：
-- **管道** (有血缘关系使用，使用最简单)
+- **管道: PIPE、FIFO** (使用最简单)
 - **信号** (开销最小)
 - **共享映射区** (无血缘关系)
 - **本地套接字** (最稳定)
@@ -863,6 +862,152 @@ int test1()
 }
 ```
 ### 4. 利用FIFO的方式进行进程间通信
+头文件：
+#include <sys/types.h>
+#include <sys/stat.h>
+#### 4.1 FIFO的概念
+FIFO常被称为**命名管道**。管道(pipe)只能用于“有血缘关系”的进程间通信。**但通过FIFO，不相关的进程也能交换数据。**
+
+
+FIFO是Linux基础文件类型中的一种（文件类型为p，可通过ls -l查看文件类型）。但FIFO文件在磁盘上没有数据块，文件大小为0，仅仅用来标识内核中一条通道。进程可以打开这个文件进行read/write，实际上是在读写内核缓冲区，这样就实现了进程间通信。
+
+**FIFO 不同于PIPE的地方在于，他是双向的，两端都可读可写。**
+
+#### 4.2 创建管道
+1. 方式1-使用**命令** mkfifo
+命令格式： mkfifo 管道名
+例如：mkfifo myfifo
+2. 方式2-使用**函数**
+int mkfifo(const char *pathname, mode_t mode);
+```cpp
+int result=mkfifo("./myfifo", 0777);
+```
+
+当创建了一个FIFO，就可以使用open函数打开它，**常见的文件I/O函数都可用于FIFO**。如：close、read、write、unlink等。
+
+FIFO严格遵循**先进先出**（first in first out），对FIFO的读总是从开始处返回数据，对它们的写则把数据添加到末尾。**FIFO不支持诸如lseek()等文件定位操作。**
+
+
+#### 4.3 使用FIFO完成两个不同进程间的通信
+
+![在这里插入图片描述](https://img-blog.csdnimg.cn/62437c148fc44016a04864d8946517db.png)
+创建完FIFO后，就和普通文件一样操作就行：一个进程写，另一个进程读。
+
+具体代码案例:
+
+FIFO_write.c:
+```cpp
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <sys/fcntl.h>
+#include <sys/errno.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+//写入FIFO
+int main()
+{
+    //判断FIFO是否存在，如果不存在则创建
+    int result= access("./myfifo1", F_OK);
+    //access函数用来判断文件是否存在
+    if(result!=0)//不存在该文件
+    {
+        result= mkfifo("./myfifo1",0777);
+        if(result<0)
+        {
+            perror("mkfifo error");
+            return -1;
+        }
+    }
+    int fd= open("./myfifo1", O_RDWR);
+    //写fifo文件
+    write(fd,"Hello world", strlen("Hello world"));
+    sleep(20);
+    close(fd);
+}
+```
+
+FIFO_read.c:
+```cpp
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <sys/wait.h>
+#include <sys/fcntl.h>
+#include <sys/errno.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+//从FIFO中读
+int main()
+{
+    int fd= open("./myfifo1", O_RDWR);
+    if(fd<0)
+    {
+        perror("open error");
+        return -1;
+    }
+    //读fifo文件
+    char buf[100];
+    memset(buf,0x00,sizeof(buf));
+    read(fd,buf, sizeof (buf));
+    printf("buf=[%s]", buf);
+    close(fd);
+}
+```
+
+### 5. 内存映射区
+**存储映射I/O (Memory-mapped I/O) 使一个磁盘文件与内存中的一个缓冲区相映射。**从缓冲区中取数据，就相当于读文件中的相应字节；将数据写入缓冲区，则会将数据写入文件。这样，就可在不使用read和write函数的情况下，使用地址（指针）完成I/O操作。**即操作内存=操作文件**
+
+使用存储映射这种方法，首先应通知内核，将一个指定文件映射到内存区域中。**这个映射工作可以通过mmap函数来实现。**
+
+<font color='red'> **通过借助文件来实现进程间的通信** </font>
+![在这里插入图片描述](https://img-blog.csdnimg.cn/f7ebfbc8be6c457f9524669268c2216e.png)
+#### 5.1 mmap函数
+**5.1. 1 函数原型**
+   void *mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
+   
+**5.1. 2 函数作用**:
+建立存储映射区
+
+**5.1. 3参数**
+- addr: 	指定内存的起始地址, **设为NULL, 由系统指定内存其实地址**
+- length：映射到内存的文件长度。获取文件大小的方式：lseek(), stat()
+- prot：	映射区的保护方式, 最常用的:
+读：PROT_READ
+写：PROT_WRITE
+读写：PROT_READ | PROT_WRITE
+- flags：	映射区的特性, 可以是
+MAP_SHARED: **对映射区的修改会反映到文件本身**（可以对文件进行修改）, 且允许其他映射该文件的进程共享。
+MAP_PRIVATE: 对映射区的写入操作会产生一个映射区的复制(copy-on-write), **对此映射区所做的修改不会对文件产生影响**。所以如果只是对文件进行读操作，用此参数。
+- fd：由open返回的文件描述符, 代表要映射的文件。
+- offset：以文件开始处的偏移量, 必须是4k的整数倍, **通常为0**, 表示从文件头开始映射。
+
+**5.1. 4函数返回值**
+- 成功：返回创建的映射区首地址；
+- 失败：MAP_FAILED宏
+
+#### 5.2 mmap函数
+
+**5.2. 1 函数原型**
+int munmap(void *addr, size_t length);
+   
+**5.2. 2 函数作用**:
+释放由mmap函数建立的存储映射区
+
+**5.2. 3参数**
+- addr：调用mmap函数成功返回的参数（映射区首地址）
+- length：映射区大小（mmap函数的第二个参数）
+
+**5.2. 4函数返回值**
+- 成功：返回0
+- 失败：返回-1，设置errno值
+
+
 ## Day7（信号）
 ### 1. 信号的基本介绍
 进程A给进程B发送信号，进程B收到信号之前执行自己的代码，收到信号后，**不管执行到程序的什么位置，都要暂停运行，去处理信号**，处理完毕后再继续执行。与硬件中断类似——异步模式。但信号是软件层面上实现的中断，早期常被称为“软中断”。
