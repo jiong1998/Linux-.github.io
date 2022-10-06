@@ -991,7 +991,7 @@ MAP_PRIVATE: 对映射区的写入操作会产生一个映射区的复制(copy-o
 - 成功：返回创建的映射区首地址；
 - 失败：MAP_FAILED宏
 
-#### 5.2 mmap函数
+#### 5.2 munmap函数
 
 **5.2. 1 函数原型**
 int munmap(void *addr, size_t length);
