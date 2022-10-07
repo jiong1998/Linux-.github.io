@@ -1,7 +1,7 @@
 
 # Linux系统编程
-个人通过学习，整理出了一份Linux下系统编程的笔记，包含了文件IO、进程、进程间通信、信号、线程、互斥等知识点，持续更新
-## Day2
+个人通过学习，整理出了一份Linux下系统编程的笔记，包含了【文件IO、进程、进程间通信、信号、线程、互斥】等知识点，持续更新
+## 第二章
 ### 1. Vim三种工作模式
 Vi有三种基本工作模式: 命令模式、文本输入模式、末行模式。
 ![在这里插入图片描述](https://img-blog.csdnimg.cn/c06dc943c1584f27b543875679a8d174.png)
@@ -89,7 +89,7 @@ gcc -o main1 main.c -I./include -L./lib -l test1
 #### 3.4 动态库
 
 静态库是.a结尾，动态库则是以.so结尾，还没学，略。
-## Day3
+## 第三章
 ### 1.  Makefile
 
 makefile文件中定义了一系列的规则来指定, 哪些文件需要先编译, 哪些文件需要后编译, 哪些文件需要重新编译, 甚至于进行更复杂的功能操作, 因为makefile就像一个Shell脚本一样, 其中也可以执行操作系统的命令.  makefile带来的好处就是——“自动化编译”, 一旦写好, **只需要一个make命令, 整个工程完全自动编译**, 极大的提高了软件开发的效率。 makefile文件是用来管理项目工程文件，通过执行make命令，**make就会自动解析并执行makefile文件**。
@@ -178,7 +178,7 @@ PCB中有文件描述符表, **文件描述符表中存放着打开的文件描�
 ![在这里插入图片描述](https://img-blog.csdnimg.cn/d499f0ad0f38482e880376b1d1130dfe.png)
 &emsp;&emsp;强调：文件描述符的作用：通过文件描述符可以找到文件的**inode**, 通过inode可以找到对应的数据块。
 
-## Day4
+## 第四章（文件IO操作）
 ### 1. open、close、read、write、lseek、dup、dup2、fcntl
 
 #### 1. open函数
@@ -401,7 +401,7 @@ fcntl(fd[0], F_SETFL, flags);
 
 ```
 
-## Day5（进程）
+## 第五章（进程）
 ### 1. 程序与进程
 - 程序，是指编译好的二进制文件，在磁盘上，占用磁盘空间, 是一个**静态**的概念.
 - 进程，一个启动的程序， 进程占用的是系统资源，如：物理内存，CPU，终端等，是一个**动态**的概念
@@ -622,7 +622,7 @@ if(pid==0)//子进程执行
 - =0：参3为WNOHANG情况下，且目前没有子进程退出。
 
 
-## Day6（进程间通信）
+## 第六章（进程间通信）
 ### 1. 进程间通信的基本概念
 Linux环境下，**进程地址空间相互独立**，**每个进程各自有不同的用户地址空间**。**任何一个进程的全局变量在另一个进程中都看不到**，**所以进程和进程之间不能相互访问**，<font color='red'> 要交换数据必须通过**内核** </font>。具体来说，在内核中开辟一块缓冲区，进程1把数据从用户空间拷到内核缓冲区，进程2再从内核缓冲区把数据读走，内核提供的这种机制称为**进程间通信**（**IPC**，InterProcess Communication）。
 ![在这里插入图片描述](https://img-blog.csdnimg.cn/596a8238029e44cead74021b739fb82e.png)
@@ -1020,7 +1020,7 @@ mmap(NULL, 4096, PROT_READ | PROT_WRITE, MAP_SHARED |
 <font color='red'> MAP_ANONYMOUS </font>, -1, 0);
 
 不需要指定fd和偏移量。
-## Day7（信号）
+## 第七章（信号）
 ### 1. 信号的基本介绍
 进程A给进程B发送信号，进程B收到信号之前执行自己的代码，收到信号后，**不管执行到程序的什么位置，都要暂停运行，去处理信号**，处理完毕后再继续执行。与硬件中断类似——异步模式。但信号是软件层面上实现的中断，早期常被称为“软中断”。
 
@@ -1032,7 +1032,12 @@ mmap(NULL, 4096, PROT_READ | PROT_WRITE, MAP_SHARED |
 
 几个常用到的信号：
 SIGINT、SIGQUIT、SIGKILL、SIGSEGV、SIGUSR1、SIGUSR2、SIGPIPE、SIGALRM、SIGTERM、SIGCHLD、SIGSTOP、SIGCONT
-SIGCHLD：子进程退出后，内核会给父进程发送该信号。
+
+2)SiGINT：Ctrl-C发出
+3)SIGQUIT：Ctrl-\发出
+10)SIGUSR1：用户自定义信号1
+12)SIGUSR2：用户自定义信号2
+17)SIGCHLD：子进程退出后，内核会给父进程发送该信号。
 
 #### 1.1 信号的状态
 信号有三种状态：产生、未决和递达。
@@ -1056,6 +1061,9 @@ Cont：继续运行进程
 - **捕捉信号**(调用用户的自定义的处理函数)：需要告诉内核，用户希望如何处理某一种信号，说白了就是**用户写一个信号处理函数**，然后将这个函数告诉内核。当该信号产生时，由**内核来调用用户自定义的函数**，以此来实现某种信号的处理。
 
 注意：**SIGKILL和SIGSTOP**不能捕获，不能阻塞，不能忽略。只能执行他们的默认动作。SIGKILL的默认动作是终止，SIGSTOP的默认动作是暂停。
+
+
+**不要使用信号来完成进程间的通信！！**
 
 ### 2. 信号相关函数
 #### 2.1 signal函数
@@ -1133,4 +1141,262 @@ pid = -1：发送给进程有权限发送的系统中所有进程。
 alarm函数调用一次只能触发一次SIGABRT信号，如果我们希望周期性触发，可以使用setitimer函数。精度微秒us。
 
 ### 3. 信号集相关
+#### 3.1 未决信号集与阻塞信号集的关系
+**未决信号集**：没有被处理的信号的集合（产生了该信号，如果此时该信号存在于阻塞信号集中，则会被放入未决信号集）
+**阻塞信号集**：被当前进程阻塞的信号的集合
+这两个集合都存储在内核的PCB。
+
+**未决信号集是否应该被处理取决于阻塞信号集对应标志位是1还是0**，当这个信号被处理之前，先检查阻塞信号集对应标志位：
+如果是1，说明该信号被阻塞，暂不处理；
+如果是0说明该信号没有被阻塞，可以处理。 处理完后未决信号机的这个标识位从1变为0；表示这个信号已经被处理了（抵达）。
+处理有三种方式：1默认 2被当前进程捕获 3忽略。
+
+![在这里插入图片描述](https://img-blog.csdnimg.cn/1498366f26be48c0852d648358cf89e6.png)
+一个标志位代表序号为x的信号，比如标志位为9代表SIGKILL信号。
+
+注意：只有当阻塞信号集中某个信号x置为1了，当进程在运行过程中碰到x信号，该信号才会进未决信号集。否则会直接处理。
+
+#### 3.2信号集的相关函数
+头文件 <signal.h>
+信号集变量 sigset_t set;
+
+由于信号集属于内核的一块区域，用户不能直接操作内核空间，为此，内核提供了一些信号集相关的接口函数，使用这些函数用户就可以完成对信号集的相关操作。
+**信号集是一个能表示多个信号的数据类型**，sigset_t set，set即一个信号集。既然是一个集合，就需要对集进行添加、删除等操作。
+
+
+- int sigemptyset(sigset_t *set);
+函数说明：将某个信号集清0
+函数返回值：成功：0；失败：-1，设置errno
+- int sigfillset(sigset_t *set);
+函数说明：将某个信号集置1		  		
+函数返回值：成功：0；失败：-1，设置errno
+- int sigaddset(sigset_t *set, int signum);	
+函数说明：将某个信号加入信号集合中（将某个信号标志位置1）
+函数返回值：成功：0；失败：-1，设置errno
+- int sigdelset(sigset_t *set, int signum);		
+函数说明：将某信号从信号清出信号集（将某个信号标志位置0）
+函数返回值：成功：0；失败：-1，设置errno
+- int sigismember(const sigset_t *set, int signum);
+函数说明：判断某个信号是否在信号集中
+函数返回值：在：1；不在：0；出错：-1，设置errno
+
+**注意前面这些函数都没有操作内核的信号集**，只是在进程自己的栈上定义了一个信号集，并对自己定义的信号集的处理，处理完要通过下面两个函数才能对内核区的信号集进行真正的处理
+- sigprocmask函数(操作内核中的阻塞信号集)
+1. 函数说明：用来阻塞信号、解除阻塞也使用该函数。其本质，读
+取或修改内核中进程控制块(PCB)中的信号阻塞字（阻塞信号集）。
+**特别注意，阻塞信号只是将信号处理延后执行(延至解除阻塞)；而忽略表示将信号丢弃处理。**
+2. 函数原型：int sigprocmask(int how, const sigset_t *set, sigset_t *oldset);
+3. 函数返回值：成功：0；失败：-1，设置errno
+4. 函数参数：
+how参数取值：假设当前的内核信号阻塞字为mask
+&emsp;&emsp;**SIG_BLOCK**: 当how设置为此值，set表示需要阻塞的信号。相当于 mask = mask|set
+&emsp;&emsp;**SIG_UNBLOCK**: 当how设置为此，set表示需要解除阻塞的信号。**set中置为1的，在内核的阻塞信号集都将置0**。相当于 mask = mask & ~set。并且当某个信号解除阻塞后，若未决信号集中有对应信号，则会马上处理。 ~~一般慎用~~ 
+&emsp;&emsp;**SIG_SETMASK**: 当how设置为此，set表示用于替代原始屏蔽及的新阻塞集。相当于mask = set若，调用sigprocmask解除了对当前若干个信号的阻塞，则在sigprocmask返回前，至少将其中一个信号递达。
+set：传入参数，是一个自定义信号集合。由参数how来指示如何修改当前信号屏蔽字。
+oldset：传出参数，保存旧的信号阻塞字。
+
+- sigpending函数 (读取当前进程的未决信号集)
+函数原型：int sigpending(sigset_t *set);	   
+函数参数：set传出参数
+函数返回值：成功：0；失败：-1，设置errno
+如何判断某个信号是否在未决信号集中：先调用sigpending函数将未决信号集获取到本地栈上，在调用sigismember判断。
+
+
+```cpp
+//sigprocmask简单示范:
+//需求：将SIGINT和SIGQUIT信号的加入到阻塞信号集
+
+//创建信号集
+sigset_t set
+//初始化信号集
+sigemptyset(&set);
+//将SIGINT和SIGQUIT加入set集合中
+sigaddset(&set, SIGINT);
+sigaddset(&set, SIGQUIT);
+//将信号集set中SIGINT和SIGQUIT信号的加入到阻塞信号集中
+sigprocmask(SIG_BLOCK,&set, NULL);
+```
+信号集代码相关案例请移步github：设置阻塞信号集并把所有常规信号的未决状态打印至屏幕 #9------https://github.com/jiong1998/Linux-.github.io/issues/9
+
+### 4. 信号捕捉函数
+#### 4.1 signal函数
+#### 4.2 sigaction函数 
+signal不同的unix版本动作会不同，用sigaction代替
+- 函数说明：
+注册一个信号处理函数
+- 函数原型：
+  int sigaction(int signum, const struct sigaction *act, struct sigaction *oldact);
+- 函数参数：
+signum：捕捉的信号
+act：    传入参数，新的处理方式。
+oldact： 传出参数，旧的处理方式
+
+
+sigaction函数结论：
+<font color='red'> 1. 若a信号处理函数执行期间，又产生了多次a信号，信号处理函数不会被打断，当信号处理函数执行完后，后面产生的多次信号a也只会被处理一次，即**信号不支持排队**。
+2. 在a信号处理函数执行期间（并且sa_mask中阻塞了b信号），若此时收到了b的信号，则b信号会被阻塞，当a信号处理函数执行完后，才会转去执行b信号处理函数（若收到多次b信号，也只会执行一次）。
+ </font>
+
+```
+sigaction结构体介绍：
+struct sigaction 
+{
+	   // 信号处理函数。可赋值为SIG_IGN表忽略或SIG_DFL表执行默认动作
+       void  (*sa_handler)(int);
+       //信号处理函数（不用，不管他）
+       void  (*sa_sigaction)(int, siginfo_t *, void *); 
+       sigset_t  sa_mask; //信号处理函数执行期间需要阻塞的信号
+       int      sa_flags; //通常为0，表示使用默认标识
+       void     (*sa_restorer)(void);//废弃
+};
+```
+sigaction用法示例：
+```cpp
+//sigaction函数测试：完成信号的注册
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <signal.h>
+
+void sighandle(int signum)
+{
+    printf("signum=%d", signum);
+}
+int main()
+{
+    struct sigaction act;
+    act.sa_handler=sighandle;//信号处理函数
+    //设置sa_mask：在执行信号处理函数时需要阻塞的信号
+    sigemptyset(&act.sa_mask);
+    sigaddset(&act.sa_mask,SIGQUIT);//在信号处理函数执行期间，阻塞SIGQUIT信号
+    act.sa_flags=0;
+    //注册信号捕捉函数
+    sigaction(SIGINT,&act,NULL);
+
+    return 0;
+}
+```
+
+#### 4.3 SIGCHLD信号
+当子进程退出时，内核会给父进程发送SIGCHLD信号。（或者子进程收到SIGSTOP信号；又或者子进程停止时，收到SIGCONT信号）
+
+SIGCHLD信号作用：
+- 子进程退出后，内核会给父进程发送SIGCHLD信号，**提醒父进程对子进程进行回收。**
+- 使用SIGCHLD信号完成对子进程的回收可以避免父进程阻塞等待而不能执行其他操作，**只有当父进程收到SIGCHLD信号之后才去调用信号捕捉函数完成对子进程的回收**，未收到SIGCHLD信号之前可以处理其他操作。
+
+**SIGCHLD信号的默认动作是忽略。若父进程没有捕获该信号，则会使得子进程变成僵尸进程。**
+
+#### 4.4父进程回收子进程案例分析
+需求分析：
+父进程创建出三个子进程，并且，父进程通过接收SIGCHLD信号完成对子进程的回收。
+
+原始的版本不放出来，需要的移步去github：https://github.com/jiong1998/Linux-.github.io/issues/11
+
+原始的版本存在的问题：
+问题1：
+&emsp;&emsp;在信号函数注册之前，子进程可能已经开始运行并退出了。此时由于信号函数还没有注册，会导致退出的进程成为僵尸进程。
+解决办法：
+&emsp;&emsp; 在fork()之前，先将SIGCHLD信号阻塞，完成信号处理函数的注册后，在解除阻塞。此时如果有SIGCHLD信号产生，会放入未决信号集。(更简单的方法是把信号注册函数放在fork函数之前，但是这会让子进程继承，既然子进程没有子子进程，就没有必要继承)
+问题2：
+&emsp;&emsp;前面提到过，**信号不支持排队**，所以在执行信号处理函数回收子进程的时候，如果有2个及以上的子进程同时给父进程发送SIGCHLD信号，父进程也只会回收一次！会导致存在僵尸进程。
+解决办法：
+&emsp;&emsp;可以在信号处理函数里面使用while(1)循环回收, 这样就有可能出现捕获一次SIGCHLD信号但是回收了多个子进程的情况，从而可以避免产生僵尸进程。
+
+```cpp
+//改进后的父进程通过SIGCHLD回收子进程
+//SIGCHLD信号处理函数
+void waitchild_new(int signum)
+{
+    //当收到SIGCHLD信号时，使用waitpid函数回收进程
+    pid_t wpid ;//
+    while(1)//利用循环回收解决僵尸进程问题
+    {
+        wpid=waitpid(-1,NULL, WNOHANG);
+        if(wpid>0)
+        {
+            printf("已利用信号SIGCHLD回收子进程资源,pid=[%d]\n", wpid);
+        }
+        if(wpid==0)//目前没有子进程退出
+        {
+            printf("还有子进程存活\n");
+            break;
+        }
+        if(wpid==-1)
+        {
+            printf("子进程已经全部回收\n");
+            break;
+        }
+    }
+}
+
+//创造出三个进程，每个进程执行自己的事。
+//当父进程接收到子进程的SIGCHLD信号时，转向执行信号处理函数，对子进程进程资源的释放
+int main()
+{
+    int i;
+
+    //将SIGCHLD信号阻塞。
+    //创建信号集
+    sigset_t set;
+    //初始化信号集
+    sigemptyset(&set);
+    //将SIGCHLD加入set集合中
+    sigaddset(&set, SIGCHLD);
+    //将set集合加入到阻塞信号集
+    sigprocmask(SIG_BLOCK, &set,NULL);
+
+    for(i=0;i<3;++i)//循环创建三个子进程
+    {
+        pid_t pid=fork();
+        if(pid < 0)
+        {
+            perror("fork error");
+            return -1;
+        }
+        if(pid > 0)//父进程
+        {
+            printf("子进程创建成功,子进程pid=[%d]\n", pid);
+        }
+        if(pid==0)//子进程
+            break;
+    }
+    if(i==0)//第一个子进程
+    {
+        printf("the first child, pid=[%d],ppid=[%d]\n", getpid(), getppid());
+        sleep(1);//模拟子进程在执行其他事
+    }
+    if(i==1)//第二个子进程
+    {
+        printf("the second child, pid=[%d],ppid=[%d]\n", getpid(), getppid());
+        sleep(2);//模拟子进程在执行其他事
+    }
+    if(i==2)//第三个子进程
+    {
+        printf("the third child, pid=[%d],ppid=[%d]\n", getpid(), getppid());
+        sleep(2);//模拟子进程在执行其他事
+    }
+    if(i==3)//父进程
+    {
+        printf("the father, pid=[%d]\n", getpid());
+        //父进程注册SIGCHLD信号处理函数
+        struct sigaction act;
+        act.sa_handler=waitchild_new;//信号处理函数
+        //设置sa_mask：在执行信号处理函数时需要阻塞的信号
+        sigemptyset(&act.sa_mask);
+        act.sa_flags=0;
+        //注册信号处理函数
+        sigaction(SIGCHLD,&act, NULL);
+        //SIGCHLD解除阻塞
+        sigprocmask(SIG_UNBLOCK, &set, NULL);
+        while(1)//这个while函数模拟父进程在执行其他事情。
+        {
+            sleep(5);//模拟父进程在执行其他事情。
+            printf("asd");
+        }
+
+    }
+}
+```
 
