@@ -182,7 +182,10 @@ PCB中有文件描述符表, **文件描述符表中存放着打开的文件描�
 ### 1. open、close、read、write、lseek、dup、dup2、fcntl
 
 #### 1. open函数
-头文件 #include <fcntl.h>
+
+头文件
+#include <fcntl.h>
+#include <sys/stat.h>
 
 **1.1 函数原型:**
 int open(const char *pathname, int flags);
@@ -196,10 +199,10 @@ pathname参数是要打开或创建的文件名,和fopen一样, pathname既可�
 1. 必选项:**以下三个常数中必须指定一个, 且仅允许指定一个。**
 - O_RDONLY 只读打开
 - O_WRONLY 只写打开
-- O_RDWR 可读可写打开
+- **O_RDWR** 可读可写打开
 2. 以下可选项可以同时指定0个或多个, 和**必选项按位或起来作为flags参数**。可选项有很多, 这里只介绍几个常用选项：
-- O_APPEND 表示追加。如果文件已有内容, 这次打开文件所写的数据附加到文件的末尾而不覆盖原来的内容。
-- O_CREAT 若此文件不存在则创建它。使用此选项时需要提供第三个参数mode, 表示该文件的访问权限。
+- **O_APPEND** 表示追加。如果文件已有内容, 这次打开文件所写的数据附加到文件的末尾而不覆盖原来的内容。
+- **O_CREAT** 若此文件不存在则创建它。使用此选项时需要提供第三个参数mode, 表示该文件的访问权限。
 文件最终权限：mode & ~umask
 - O_EXCL 如果同时指定了O_CREAT,并且文件已存在,则出错返回。
 - O_TRUNC 如果文件已存在, 将其长度截断为为0字节。
@@ -1033,11 +1036,12 @@ mmap(NULL, 4096, PROT_READ | PROT_WRITE, MAP_SHARED |
 几个常用到的信号：
 SIGINT、SIGQUIT、SIGKILL、SIGSEGV、SIGUSR1、SIGUSR2、SIGPIPE、SIGALRM、SIGTERM、SIGCHLD、SIGSTOP、SIGCONT
 
-2)SiGINT：Ctrl-C发出
-3)SIGQUIT：Ctrl-\发出
-10)SIGUSR1：用户自定义信号1
-12)SIGUSR2：用户自定义信号2
-17)SIGCHLD：子进程退出后，内核会给父进程发送该信号。
+2）SiGINT：Ctrl-C发出
+3）SIGQUIT：Ctrl-\发出
+10）SIGUSR1：用户自定义信号1
+12）SIGUSR2：用户自定义信号2
+14）SIGALRM：定时器到点后发送的信号
+17）SIGCHLD：子进程退出后，内核会给父进程发送该信号。
 
 #### 1.1 信号的状态
 信号有三种状态：产生、未决和递达。
@@ -1067,26 +1071,8 @@ Cont：继续运行进程
 
 ### 2. 信号相关函数
 #### 2.1 signal函数
-头文件 #include <signal.h>
 
-**2.1. 1函数原型**
-```cpp
-void handler(int signum);//信号处理函数
-sighandler_t signal(int signum, sighandler_t handler);//注册信号处理函数
-```
-
-**2.1. 2 函数作用**：
-signal()：
-&emsp;&emsp;注册 信号处理函数。**当遇到该信号时，内核就会调用对应的信道处理函数。**
-handler()：信号处理函数,作为参数传入signal中。
-
-**2.1. 3 函数参数**
-- signum：信号编号。用宏定义，不要用数字
-- handler：信号处理函数
-
-
-注意：**内核执行的信号处理函数，不是进程执行。**
-
+看第四节
 #### 2.2 kill函数
 头文件 #include <signal.h>
 
@@ -1135,14 +1121,39 @@ pid = -1：发送给进程有权限发送的系统中所有进程。
 注意：alarm(0)取消闹钟，返回旧闹钟剩下的秒数
 
 #### 2.5 setitimer函数
-没研究，等需要的时候在研究。
+#include <sys/time.h>
 
  **函数描述**
 alarm函数调用一次只能触发一次SIGABRT信号，如果我们希望周期性触发，可以使用setitimer函数。精度微秒us。
 
+**函数原型**       
+int setitimer(int which, const struct itimerval *new_value,
+                     struct itimerval *old_value);
+
+**函数参数**
+- which：填ITIMER_REAL，计算自然时间
+- new_value是一个结构体，该结构体包含了两个相同的结构体。
+
+具体看代码案例：
+
+```cpp
+//设置一个周期性2s发送一次时钟信号
+struct itimerval tm;
+//触发周期赋值
+tm.it_interval.tv_sec=2;//每隔两秒触发一次
+tm.it_interval.tv_usec=0;//微秒，不管他
+//第一次触发事件赋值
+tm.it_value.tv_sec=3;//三秒后第一次触发
+tm.it_value.tv_usec=;//微秒，不管他
+
+setitimer(ITIMER_REAL, &tm, NULL);
+```
+没研究，等需要的时候在研究。
+
+
 ### 3. 信号集相关
 #### 3.1 未决信号集与阻塞信号集的关系
-**未决信号集**：没有被处理的信号的集合（产生了该信号，如果此时该信号存在于阻塞信号集中，则会被放入未决信号集）
+**未决信号集**：没有被处理的信号的集合（假设产生了某信号，如果此时该信号存在于阻塞信号集中，则会被放入未决信号集）
 **阻塞信号集**：被当前进程阻塞的信号的集合
 这两个集合都存储在内核的PCB。
 
@@ -1220,6 +1231,26 @@ sigprocmask(SIG_BLOCK,&set, NULL);
 
 ### 4. 信号捕捉函数
 #### 4.1 signal函数
+头文件 #include <signal.h>
+
+**2.1. 1函数原型**
+```cpp
+void handler(int signum);//信号处理函数
+sighandler_t signal(int signum, sighandler_t handler);//注册信号处理函数
+```
+
+**2.1. 2 函数作用**：
+signal()：
+&emsp;&emsp;注册 信号处理函数。**当遇到该信号时，内核就会调用对应的信道处理函数。**
+handler()：信号处理函数,作为参数传入signal中。
+
+**2.1. 3 函数参数**
+- signum：信号编号。用宏定义，不要用数字
+- handler：信号处理函数
+
+
+注意：**内核执行的信号处理函数，不是进程执行。**
+
 #### 4.2 sigaction函数 
 signal不同的unix版本动作会不同，用sigaction代替
 - 函数说明：
@@ -1228,14 +1259,8 @@ signal不同的unix版本动作会不同，用sigaction代替
   int sigaction(int signum, const struct sigaction *act, struct sigaction *oldact);
 - 函数参数：
 signum：捕捉的信号
-act：    传入参数，新的处理方式。
-oldact： 传出参数，旧的处理方式
-
-
-sigaction函数结论：
-<font color='red'> 1. 若a信号处理函数执行期间，又产生了多次a信号，信号处理函数不会被打断，当信号处理函数执行完后，后面产生的多次信号a也只会被处理一次，即**信号不支持排队**。
-2. 在a信号处理函数执行期间（并且sa_mask中阻塞了b信号），若此时收到了b的信号，则b信号会被阻塞，当a信号处理函数执行完后，才会转去执行b信号处理函数（若收到多次b信号，也只会执行一次）。
- </font>
+act：    结构体，传入参数，新的处理方式。
+oldact： 结构体，传出参数，旧的处理方式
 
 ```
 sigaction结构体介绍：
@@ -1250,6 +1275,11 @@ struct sigaction
        void     (*sa_restorer)(void);//废弃
 };
 ```
+sigaction函数结论：
+<font color='red'> 1. 若a信号处理函数执行期间，又产生了多次a信号，信号a本身会被阻塞，信号处理函数不会被打断，当信号处理函数执行完后，后面产生的多次信号a也只会被处理一次，即**信号不支持排队**。
+2. 在a信号处理函数执行期间（并且sa_mask中阻塞了b信号），若此时收到了b的信号，则b信号会被阻塞，当a信号处理函数执行完后，才会转去执行b信号处理函数（若收到多次b信号，也只会执行一次）。
+ </font>
+
 sigaction用法示例：
 ```cpp
 //sigaction函数测试：完成信号的注册
@@ -1272,9 +1302,10 @@ int main()
     sigemptyset(&act.sa_mask);
     sigaddset(&act.sa_mask,SIGQUIT);//在信号处理函数执行期间，阻塞SIGQUIT信号
     act.sa_flags=0;
-    //注册信号捕捉函数
+    //利用sigaction注册信号捕捉函数
     sigaction(SIGINT,&act,NULL);
-
+    //利用signal注册信号捕捉函数
+    signal(SIGINT, sighandle);
     return 0;
 }
 ```
@@ -1400,3 +1431,176 @@ int main()
 }
 ```
 
+## 第八章（线程）
+### 1. 守护进程
+#### 1.1 守护进程的概念
+Daemon(精灵)进程，是**Linux中的后台服务进程**，**通常独立于控制终端并且周期性地执行某种任务或等待处理某些发生的事件**。一般采用以d结尾的名字，如vsftpd
+
+Linux后台的一些系统服务进程，没有控制终端，不能直接和用户交互。不受用户登录、注销的影响，一直在运行着，他们都是守护进程。如：预读入缓输出机制的实现；ftp服务器；nfs服务器等。
+
+总结守护进程的特点：
+- Linux后台服务进程
+- 独立于控制终端(不受终端控制)
+- 周期性的执行某种任务
+- 不受用户登陆和注销的影响
+- 一般采用以d结尾的名字（不是绝对）
+
+#### 1.2 进程组和会话
+##### 进程组：
+一个进程组包含多个进程
+
+每个进程都属于一个进程组，**引入进程组是为了简化对进程的管理。** 当父进程创建子进程的时候，默认子进程与父进程属于同一个进程组。
+
+进程组的特点：
+1. **进程组ID\=\=第一个进程ID**（组长进程）。如父进程创建了多个子进程，父进程和多个子进程同属于一个组，而由于父进程是进程组里的第一个进程，所以父进程就是这个组的组长, 组长ID==父进程ID。
+2. 可以使用kill -SIGKILL -进程组ID(负的)来将整个进程组内的进程全部杀死。
+3. 只要进程组中有一个进程存在，进程组就存在，与组长进程是否终止无关。
+4. 进程组生存期：从进程组创建到最后一个进程离开。
+
+##### 会话：
+多个进程组组成一个会话
+
+会话的特点：
+1. 重要！！<font color='red'> **创建会话的进程不能是进程组组长**（所以父进程不能创建会话） </font>
+2. 创建会话的进程成为一个进程组的组长进程，同时也成为会话的会长。
+3. 新创建的会话丢弃原有的控制终端
+4.  建立新会话时，先调用fork, 父进程终止，子进程调用setsid函数
+
+进程组和会话的关系图
+![在这里插入图片描述](https://img-blog.csdnimg.cn/49030911141f474e8c6041b9c7c86bb1.png)
+
+#### 1.3 创建守护进程的流程
+1. **父进程fork子进程, 然后父进程退出.**
+	- 目的是: 让子进程不成为进程组长, 为后续调用setsid函数提供了条件.
+2. **子进程调用setsid函数创建一个新的会话.**
+	- 该子进程成了该会话的会长
+	-  该子进程成了该组的组长进程.
+	-  不再受控制终端的影响了
+3. 改变当前的工作目录, chdir  -----不是必须的
+4. 重设文件掩码, umask(0000)  -----不是必须的
+	- 增加进程的操作的灵活性
+5. 关闭STDIN_FILENO  STDOUT_FILENO STDERR_FILENO   ----不是必须的
+	- 节省资源
+6. **执行核心操作**
+
+#### 1.4创建守护进程具体代码实现
+编写一个守护进程，每隔2S钟获取一次系统时间，并将这个时间写入磁盘文件。
+
+需求分析：
+- 首先要创建一个守护进程.
+- 每隔2S钟: 使用setitimer函数设置时钟, 该时钟发送的是SIGALRM信号,
+- 信号操作: 注册信号处理函数,signal或者sigaction, 还有一个信号处理函数
+- 获取一次系统时间: time函数的使用, ctime函数的使用
+- 文件IO操作：写入磁盘文件: 文件操作函数: open write close 
+
+```cpp
+//编写一个守护进程，每隔2S钟获取一次系统时间，并将这个时间写入磁盘文件。
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <signal.h>
+#include <time.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <sys/time.h>
+int flags=0;
+void handler()
+{
+    //文件只需要打开一次，设置flag来判断是否第一次打开
+    int fd;
+    if(flags==0)
+    {
+        fd= open("./time.log",O_RDWR | O_APPEND | O_CREAT, 0755);
+        if(fd<0)
+            return;
+    }
+    //获取时间
+    time_t t;
+    time(&t);
+    char * p = ctime(&t);
+    //写入文件
+    write(fd, p, strlen(p));
+    return;
+}
+int main()
+{
+    pid_t pid= fork();
+    if(pid < 0 || pid>0)//父进程退出
+    {
+        exit(1);
+    }
+    //子进程创建会话
+    setsid();
+    //改变当前工作目录
+    chdir("./");//这里不该
+    //重设文件掩码
+    umask(0000);
+    //核心操作:
+
+    //注册信号
+    struct sigaction act;
+    act.sa_handler= handler;
+    act.sa_flags=0;
+    sigemptyset(&act.sa_mask);
+    sigaction(SIGALRM, &act, NULL);
+//    signal(SIGALRM, handler);
+
+    //设置时钟信号
+    struct itimerval tm;
+    //触发周期赋值
+    tm.it_interval.tv_sec=2;//每隔两秒触发一次
+    tm.it_interval.tv_usec=0;//微秒，不管他
+    //第一次触发事件赋值
+    tm.it_value.tv_sec=3;//三秒后第一次触发
+    tm.it_value.tv_usec=0;//微秒，不管他
+    setitimer(ITIMER_REAL, &tm, NULL);//该函数每隔2s发送一次SIGALRM信号
+    while (1)//让守护进程持续运行
+    {
+        sleep(1);
+        //注意：结束程序要先用命令：ps ajx | grep day8_Daemo查找进程号，然后kill -9 进程号 来结束进程 
+    }
+}
+```
+
+### 2. 线程（pthread_create）
+
+#### 2.1 线程的概念
+线程----轻量级的进程
+
+- 进程：分配资源的基本单位
+- 线程：系统调度的基本单位
+
+进程：**拥有独立的地址空间**，拥有PCB，相当于独居。
+线程：有PCB，**但没有独立的地址空间**，**多个线程共享进程空间**，相当于合租。
+
+
+![在这里插入图片描述](https://img-blog.csdnimg.cn/f2f8a3a73cee450bbbbc149b16be516a.png)
+由图可知：在使用pthread_create创造线程后，会在内核区复制pcb来创造线程（也没有完全复制，比如文件描述符。所有线程共享同一个文件描述符），共享除了栈以外的所有资源
+
+特点：
+- 不同的线程有不同的线程号，但是pid是同一个。
+- **除了栈空间外**，其余资源全部共享
+- 线程执行顺序不一定
+- 从内核里看进程和线程是一样的，底层实现都是调用同一个内核函数 clone。进程和线程都有各自不同的PCB。内核只看pcb，有几个pcb就有几个进程。**在内核看来，线程只是没有独立地址空间的进程。**
+
+所以由于线程共享地址空间，所以当线程读全局变量时，需要加锁。
+
+- 线程共享资源
+	- 文件描述符表
+	- 每种信号的处理方式
+	- 当前工作目录
+	- 用户ID和组ID
+	- 内存地址空间 (.text/.data/.bss/heap/共享库) 
+- 线程非共享资源
+	- 线程id
+	- 处理器现场和栈指针(内核栈)
+	- 独立的栈空间(用户空间栈)
+	- errno变量
+	- 信号屏蔽字（线程里不使用信号）
+	- 调度优先级
+
+从经验来说：一般业务处理用进程，一般网络通信用线程
+
+## 2.2 pthread_create函数----创建线程
