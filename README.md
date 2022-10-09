@@ -271,7 +271,7 @@ ssize_t write(int fd, const void *buf, size_t count);
 &emsp;&emsp;成功：返回写入的字节数
 &emsp;&emsp;错误：返回-1并设置errno
 
-#### 5. lseek函数
+#### 5. lseek函数--修改文件偏移量
 **5.1 函数原型:**
 off_t lseek(int fd, off_t offset, int whence);
 
@@ -287,7 +287,7 @@ SEEK_END：文件结尾位置
 
 **5.4 函数返回值:**
 若lseek成功执行, 则返回新的偏移量。
-#### 6. dup函数
+#### 6. dup函数---复制文件描述符
 头文件 <unistd.h>
 **6.1 函数原型:**
 int dup(int oldfd);
@@ -308,7 +308,7 @@ int newfd = dup(fd);//此时newfd和fd这两个文件描述符都指向同一个
 <font color='red'> 注意：当调用dup后，内核会维护**描述符计数**，close一个文件描述符时，计数-1，只有减到0时，文件才真正的关闭。 </font>
 
 
-#### 7. dup2函数
+#### 7. dup2函数 ---指定一个文件描述符去复制成新的文件描述符
 **7.1 函数原型:**
 int dup2(int oldfd, int newfd);
 
@@ -505,7 +505,7 @@ kill -l 查看系统有哪些信号
 kill -9 pid 杀死某个线程
 
 
-### 7. exec
+### 7. exec----在进程中执行命令或程序
 exec：想在一个进程中：**执行一个应用程序**或者想**执行一个系统命令**，应先fork，再在子进程中执行execl拉起可执行程序或者命令。
 ```c
 pid = fork()
@@ -1564,7 +1564,7 @@ int main()
 }
 ```
 
-### 2. 线程（pthread_create）
+### 2. 线程
 
 #### 2.1 线程的概念
 线程----轻量级的进程
@@ -1603,4 +1603,389 @@ int main()
 
 从经验来说：一般业务处理用进程，一般网络通信用线程
 
-## 2.2 pthread_create函数----创建线程
+#### 2.2 pthread_create----创建线程
+<pthread.h>
+要链接-pthread库
+- **函数原型**：
+```cpp
+int pthread_create(pthread_t *thread, 
+				const pthread_attr_t *attr,
+                void *(*start_routine) (void *),
+				  void *arg);
+```
+-  函数参数：
+	- pthread_t：线程id。传出参数，保存系统为我们分配好的线程ID
+	- attr：线程属性。通常传NULL，表示使用线程默认属性。若想使用具体属性也可以修改该参数。
+	- start_routine：回调函数。函数指针，指向线程主函数(线程体)，该函数运行结束，则线程结束。
+	- arg：线程主函数执行期间所使用的参数
+- 返回值：
+	- 成功，返回0
+	- 失败，返回错误号(不要用perror，用**strerror**打印错误)
+
+
+简单创建子线程案例
+```cpp
+//创建子线程接收参数并执行printf
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <pthread.h>
+#include <sys/types.h>
+void *mythread(void *arg)
+{
+    printf("child thread, pid=%d, id=%ld\n", getpid(),pthread_self());
+    pthread_exit(NULL);//子线程退出
+}
+int main()
+{
+    //创建子进程
+    pthread_t pthread_id;
+    int ret = pthread_create(&pthread_id, NULL, mythread,NULL);
+    if(ret!=0)
+    {
+        printf("pthread_create error", strerror(ret));
+        return -1;
+    }
+    printf("father thread, pid=%d, id=%ld\n", getpid(),pthread_self());
+    pthread_join(pthread_id, NULL);//线程回收
+    return 1;
+}
+```
+
+##### 2.2.1 循环创建多个子线程
+在原始版本中（原版本代码可以移步至https://github.com/jiong1998/Linux-.github.io/issues/13中看），最后每个子线程打印出来的值并不是想象中的值，比如都是5。
+
+为什么？
+原因是：由于主线程可能会在一个cpu时间片内连续创建了5个子线程，此时变量i的值变成了5，并且传入的值是int*地址, 当主线程失去cpu的时间片后，子线程得到cpu的时间片，**子线程访问的是变量i的内存空间的值**，所以打印出来值为5.
+
+解决办法：
+可以在主线程定义一个数组：int arr[5];，然后创建线程的时候分别传递不同的数组元素，这样每个子线程访问的就是互不相同的内存空间，这样就可以打印正确的值。
+
+分析的如图所示
+![在这里插入图片描述](https://img-blog.csdnimg.cn/3b1aad743c7a480daed0318db049534e.png)
+左图是修改前的代码所示（所有线程共享一个i的内存空间），右边图是修改后的代码所示（每个线程访问互不相同的内存空间）
+
+代码修改后如下：
+```cpp
+//子线程执行函数
+void *mythread(void * arg)
+{
+    int i= *(int *)arg;
+    printf("i=[%d],thread_id=[%ld]\n", i, pthread_self());
+}
+
+int main()
+{
+    pthread_t thread[5];
+    int i,ret;
+    int arr[5];
+    for(i=0;i<5;++i)
+    {
+        arr[i]=i;
+        ret = pthread_create(&thread[i],NULL,mythread,&arr[i]);
+        if(ret!=0)
+        {
+            printf("pthread_create error", strerror(ret));
+            return -1;
+        }
+    }
+    sleep(1);
+    return 0;
+}
+```
+```
+输出结果：
+i=[2],thread_id=[6167113728]
+i=[0],thread_id=[6165966848]
+i=[1],thread_id=[6166540288]
+i=[3],thread_id=[6167687168]
+i=[4],thread_id=[6168260608]
+```
+#### 2.3 pthread_exit---线程退出
+**在线程中禁止调用exit函数**，否则会导致整个进程退出，取而代之的是调用pthread_exit函数，这个函数是使一个线程退出，<font color='red'> 如果主线程调用pthread_exit函数也不会使整个进程退出，不影响其他线程的执行。</font>
+
+- 函数描述
+	- 将单个线程退出
+- 函数原型
+	-	void pthread_exit(void *retval);	
+- 函数参数
+	- retval表示线程退出状态，通常传NULL
+
+另注意，pthread_exit或者return返回的指针所指向的内存单元必须是**全局的或者是用malloc分配的**，不能在线程函数的栈上分配，因为当其它线程得到这个返回指针时线程函数已经退出了，栈空间就会被回收。
+
+**当主线程提前退出，并不会影响子线程的运行，而此时子线程还没有退出，会导致整个进程变成僵尸进程**。
+
+只有最后一个退出的是主线程，整个进程空间才能回收，才能避免僵尸进程。因此需要线程回收--pthread_join
+
+#### 2.4 pthread_join---线程回收
+类似进程的wait()函数
+
+- 函数描述：**阻塞**等待线程退出，获取线程退出状态。其作用，对应进程中的waitpid() 函数。
+- 函数原型：int pthread_join(pthread_t thread, void **retval); 
+- 函数返回值：
+	- 成功：0；
+	- 失败：错误号
+- 函数参数： 
+	- thread：线程ID
+	- retval：存储线程结束状态，整个指针和pthread_exit的参数是同一块内存地址。
+
+
+#### 2.5 pthread_detach---设置线程分离状态
+- 线程的分离状态决定一个线程以什么样的方式来终止自己，有两种状态：
+	- 非分离状态：线程的默认属性是非分离状态，这种情况下，原有的线程等待创建的线程结束。只有当pthread_join()函数返回时，创建的线程才算终止，才能释放自己占用的系统资源。
+	- 分离状态：指定该状态，线程主动与主控线程断开关系。**子线程运行结束了，子线程也就终止了，马上自己释放系统资源**。将不会产生僵尸进程。网络、多线程服务器常用。
+
+
+也可使用 pthread_create函数参2(线程属性)来设置线程分离。pthread_detach函数是在创建线程之后调用的。
+
+- 函数描述
+	- 实现线程分离
+- 函数原型
+	- int pthread_detach(pthread_t thread);	
+- 函数返回值
+	- 成功：0；
+	- 失败：错误号
+
+
+
+#### 2.6 pthread_cancel---取消线程
+- 函数描述
+	- 杀死(取消)线程。其作用，对应进程中 kill() 函数。
+- 函数原型
+	- int pthread_cancel(pthread_t thread);	
+- 函数返回值
+	- 成功：0；
+	- 失败：错误号
+
+**注意：线程的取消并不是实时的，而有一定的延时。需要等待线程到达某个取消点(检查点)。**
+
+取消点：是线程检查是否被取消，并按请求进行动作的一个位置。通常是一些系统调用creat，open，pause，close，read，write..... 。**可粗略认为一个系统调用(进入内核)即为一个取消点（可以让进程阻塞的一般都取消点）**。还以通过调用 **pthread_testcancel()** 函数设置一个取消点。
+
+#### 2.7 进程函数和线程函数的比较
+进程    | 线程
+------ | -----
+fork  | pthread_create
+exit  | pthread_exit
+wait/waitpid | pthread_join
+kill  | pthread_cancel
+getpid| pthread_self
+
+
+### 3. 线程属性
+linux下线程的属性是可以根据实际项目需要，进行设置，之前讨论的线程都是采用线程的默认属性，默认属性已经可以解决绝大多数开发时遇到的问题，如果对程序的性能提出更高的要求，则需要设置线程属性，
+
+#### 3.1 创建线程的时候设置分离属性
+本节以设置线程的分离属性为例讲解设置线程属性。
+
+设置线程属性分为以下步骤：
+
+第1步：定义线程属性类型的变量
+pthread_attr_t  attr;	
+
+第2步：对线程属性变量进行初始化
+int pthread_attr_init (pthread_attr_t* attr);
+
+第3步：设置线程为分离属性
+```cpp
+int pthread_attr_setdetachstate(
+pthread_attr_t *attr, int detachstate);
+```
+- 参数:
+	- attr: 线程属性
+	- detachstate: PTHREAD_CREATE_DETACHED(分离属性)
+
+
+注意：这一步完成之后调用pthread_create函数创建线程，则创建出来的线程就是分离线程；其实上述三步就是pthread_create的第二个参数做准备工作。
+
+第4步：释放线程属性资源
+int pthread_attr_destroy(pthread_attr_t *attr);
+参数：线程属性
+
+创建子线程的时候设置分离属性的简单案例：
+```cpp
+//在创建子线程的时候设置分离属性
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <pthread.h>
+#include <sys/types.h>
+
+void * mythread(void * arg)
+{
+    printf("chlid pthread[%ld]\n", pthread_self());
+}
+
+int main()
+{
+    pthread_t pthread_id;
+    //1 定义线程属性类型的变量
+    pthread_attr_t attr;
+    //2 对线程属性变量进行初始化
+    pthread_attr_init(&attr);
+    //3 设置线程为分离属性
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+    int ret = pthread_create(&pthread_id, &attr, mythread, NULL);
+    if(ret!=0)
+    {
+        printf("pthread_create error", strerror(ret));
+        return -1;
+    }
+    //4 释放线程属性
+    pthread_attr_destroy(&attr);
+    printf("father pthread[%ld]\n", pthread_self());
+    return 1;
+}
+```
+
+### 4 互斥锁
+同步：对运行次序的一种制约关系。
+互斥：一种对共享资源的制约关系（信号灯）
+
+#### 4.1 两个线程数数模型（问题引出）
+创建两个线程，让两个线程共享一个全局变量int number， 然后让每个线程数5000次数，最后打印出来的数不是10000。
+
+造成这样的原因：
+- **多个线程访问共享资源**
+- 调度随机（线程操作共享资源的先后顺序不确定）	
+- 线程间缺乏必要的互斥机制。
+
+解决办法：
+&emsp;&emsp;提供互斥机制，即**加互斥锁**。
+![在这里插入图片描述](https://img-blog.csdnimg.cn/7a51b9ea7c1847cd9d625a9d5190b22a.png)
+当某个线程加锁，**另一个线程也想访问该资源发现上锁了，就会阻塞等待，直到解锁**。
+
+使用互斥锁之后，两个线程由并行操作变成了串行操作，效率降低了，但是数据不一致的问题得到解决了。
+#### 4.2 pthread_mutex_init----初始化锁
+
+pthread_mutex_t 类型
+- 其本质是一个结构体，为简化理解，应用时可忽略其实现细节，简单当成整数看待。
+- thread_mutex_t mutex; 变量mutex只有两种取值1、0。
+
+pthread_mutex_init函数：
+- 函数描述：
+	- 初始化一个互斥锁(互斥量) ---> 初值可看作1
+- 函数原型：
+```cpp
+int pthread_mutex_init(pthread_mutex_t *restrict mutex, 
+		const pthread_mutexattr_t *restrict attr);
+```
+- 函数参数
+	- mutex：传出参数，调用时应传 &mutex	
+	- attr：互斥锁属性。是一个传入参数，通常传NULL，选用默认属性(线程间共享)。
+	
+互斥量mutex的两种初始化方式：
+- 静态初始化：如果互斥锁 mutex 是静态分配的（定义在全局，或加了static关键字修饰），可以直接使用宏进行初始化。
+pthead_mutex_t muetx = PTHREAD_MUTEX_INITIALIZER;
+- 动态初始化：局部变量应采用动态初始化。
+pthread_mutex_init(&mutex, NULL)
+
+#### 4.3 pthread_mutex_destroy----销毁锁
+- 函数描述
+	- 销毁一个互斥锁
+- 函数原型
+	- int pthread_mutex_destroy(pthread_mutex_t *mutex);
+- 函数参数
+	- mutex—互斥锁变量
+#### 4.4 pthread_mutex_lock----加锁操作
+- 函数描述
+	- 对互斥所加锁，可理解为将mutex- -。这是一个阻塞函数，如果加锁不成功（mutex减后<0），则调用该函数的线程将被阻塞。
+- 函数原型
+	- int pthread_mutex_lock(pthread_mutex_t *mutex);
+- 函数参数
+	- mutex—互斥锁变量
+
+#### 4.5 pthread_mutex_unlock----解锁操作
+- 函数描述
+	- 对互斥所解锁，可理解为将mutex ++
+- 函数原型
+	- int pthread_mutex_unlock(pthread_mutex_t *mutex);
+
+#### 4.6 pthread_mutex_trylock----尝试加锁
+ead_mutex_trylock函数
+- 函数描述
+	- 尝试加锁。不会阻塞，如果发现加不了锁，直接返回。
+- 函数原型
+	- int pthread_mutex_trylock(pthread_mutex_t *mutex);
+- 函数参数
+	- mutex—互斥锁变量
+
+#### 4.7 加锁和解锁
+加锁和解锁
+- lock尝试加锁，如果加锁不成功，线程阻塞，阻塞到持有该互斥量的其他线程解锁为止。
+- unlock主动解锁函数，**同时将阻塞在该锁上的所有线程全部唤醒**，至于哪个线程先被唤醒，取决于优先级、调度。默认：先阻塞、先唤醒。
+
+互斥锁步骤：
+- 第一步：全局创建一把互斥锁
+	- pthread_mutex_t mutex;
+- 第二步：在main函数中初始化互斥锁
+	- pthread_mutex_init(&mutex, NULL);---相当于mutex=1
+- 第三步：在代码中寻找共享资源（也称为临界区）
+	- pthread_mutex_lock(&mutex);  -- mutex = 0
+	- [临界区代码]
+	- pthread_mutex_unlock(&mutex); -- mutex = 1
+- 第四步：在main函数中释放互斥锁
+	- pthread_mutex_destroy(&mutex);
+
+#### 4.8 互斥锁代码示例：利用互斥锁完成两个线程数数
+```cpp
+//需求：定义一个全局变量number，利用互斥锁让每个线程数5000个数,
+//最后全局变量number应该输出10000
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <pthread.h>
+#include <sys/types.h>
+
+//定义一个互斥锁
+pthread_mutex_t mutex;
+
+int number=0;
+void * mythread(void * arg)//线程调用函数
+{
+    int i;
+    int j;
+    for(i=0;i<5000;++i)
+    {
+        pthread_mutex_lock(&mutex);//加锁
+        j=number;
+        j++;
+        number=j;
+        pthread_mutex_unlock(&mutex);//解锁
+    }
+    pthread_exit(NULL);
+}
+int main()
+{
+    //初始化锁
+    pthread_mutex_init(&mutex, NULL);
+    //创建子进程
+    pthread_t pthread_id[2];
+    for (int j=0;j<2;++j)
+    {
+        int ret = pthread_create(&pthread_id[j], NULL, mythread,NULL);
+        if(ret!=0)
+        {
+            printf("pthread_create error", strerror(ret));
+            return -1;
+        }
+//        pthread_detach(pthread_id[j]);
+    }
+    pthread_join(pthread_id[0],NULL);
+    pthread_join(pthread_id[1],NULL);
+    printf("number=%d", number);
+    //销毁锁
+    pthread_mutex_destroy(&mutex);
+    return 1;
+}
+```
+### 5. 死锁
+
+
+
+#### 2.7 a
+
+#### 2.7 a
+
