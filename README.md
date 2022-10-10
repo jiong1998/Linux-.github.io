@@ -1916,6 +1916,7 @@ ead_mutex_trylock函数
 - lock尝试加锁，如果加锁不成功，线程阻塞，阻塞到持有该互斥量的其他线程解锁为止。
 - unlock主动解锁函数，**同时将阻塞在该锁上的所有线程全部唤醒**，至于哪个线程先被唤醒，取决于优先级、调度。默认：先阻塞、先唤醒。
 
+#### 4.8 互斥锁的使用步骤
 互斥锁步骤：
 - 第一步：全局创建一把互斥锁
 	- pthread_mutex_t mutex;
@@ -1928,7 +1929,7 @@ ead_mutex_trylock函数
 - 第四步：在main函数中释放互斥锁
 	- pthread_mutex_destroy(&mutex);
 
-#### 4.8 互斥锁代码示例：利用互斥锁完成两个线程数数
+#### 4.9 互斥锁代码示例：利用互斥锁完成两个线程数数
 ```cpp
 //需求：定义一个全局变量number，利用互斥锁让每个线程数5000个数,
 //最后全局变量number应该输出10000
@@ -1982,10 +1983,442 @@ int main()
 }
 ```
 ### 5. 死锁
+![在这里插入图片描述](https://img-blog.csdnimg.cn/02c06a2d2f9b406a99ea5d8485880450.png)
+死锁是指两个或两个以上的进程在执行过程中，由于竞争资源或者由于彼此通信而造成的一种阻塞的现象。
+
+如何解决死锁：
+- 让线程按照一定的顺序去访问共享资源
+- 在访问其他锁的时候，需要先将自己的锁解开
+- 调用pthread_mutex_trylock，如果加锁不成功会立刻返回
 
 
 
-#### 2.7 a
+### 6. 读写锁
 
-#### 2.7 a
+#### 6.1 读写锁的基本概念
+读写锁也叫共享-独占锁。当读写锁以读模式锁住时，它是以共享模式锁住的；当它以写模式锁住时，它是以独占模式锁住的。**写独占、读共享。**
 
+读写锁是“读模式加锁”时，此时如果既有试图以写模式加锁的线程，也有试图以读模式加锁的线程。那么读写锁就会阻塞读模式锁请求。**优先满足写模式锁**。读锁、写锁并行阻塞，写锁优先级高
+
+总结就是：读并行，写独占，当读写同时等待锁的时候写的优先级高。
+
+读写锁使用场合
+&emsp;&emsp;读写锁非常适合于对数据结构读的次数远大于写的情况。
+
+#### 6.2 读写锁的相关函数
+定义一把读写锁: pthread_rwlock_t rwlock;
+1. 初始化读写锁
+```cpp
+int pthread_rwlock_init(                                
+pthread_rwlock_t *restrict rwlock, 
+const pthread_rwlockattr_t *restrict attr);
+```
+- 函数参数
+	- wlock-读写锁
+	- attr-读写锁属性，传NULL为默认属性
+
+2. 销毁读写锁
+	- int pthread_rwlock_destroy(pthread_rwlock_t *rwlock);        
+3. 加读锁
+	- int pthread_rwlock_rdlock(pthread_rwlock_t *rwlock);              
+4. 尝试加读锁
+	- int pthread_rwlock_tryrdlock(pthread_rwlock_t *rwlock);
+5. 加写锁
+	- int pthread_rwlock_wrlock(pthread_rwlock_t *rwlock);
+6. 尝试加写锁
+	- int pthread_rwlock_trywrlock(pthread_rwlock_t *rwlock);
+7. 解锁
+	- int pthread_rwlock_unlock(&pthread_rwlock_t *rwlock);
+
+
+
+
+#### 6.3 读写锁测试程序
+3个线程不定时写同一全局资源，5个线程不定时读同一全局资源
+```cpp
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <pthread.h>
+#include <time.h>
+
+//定义一把锁
+pthread_rwlock_t rwlock;
+
+//定义全局变量number
+int number=0;
+
+void* write_function(void * arg)
+{
+    int temp;
+    while(1)
+    {
+        //加写锁
+        pthread_rwlock_wrlock(&rwlock);
+
+        temp=number;
+        temp++;
+        number=temp;
+
+        //解锁
+        pthread_rwlock_unlock(&rwlock);
+        sleep(rand()%3);
+    }
+}
+void* read_function(void * arg)
+{
+    int i=*(int *) arg;
+    int temp;
+    while(1)
+    {
+        //加写锁
+        pthread_rwlock_rdlock(&rwlock);
+
+        temp=number;
+        printf("[%ld]---read：[%d]\n", i,temp);
+
+        //解锁
+        pthread_rwlock_unlock(&rwlock);
+        sleep(rand()%3);
+    }
+}
+int main()
+{
+    int i;
+    int n=8;
+    int arr[8];
+    pthread_t thread[8];
+    //初始化读写锁
+    pthread_rwlock_init(&rwlock,NULL);
+
+    //创建3个写线程
+    for(i=0;i<3;++i)
+    {
+        arr[i]=i;
+        pthread_create(&thread[i],NULL,write_function, &arr[i]);
+    }
+    //创建5个读线程
+    for(i=3;i<n;++i)
+    {
+        arr[i]=i;
+        pthread_create(&thread[i],NULL,read_function, &arr[i]);
+    }
+    for(int j=0;j<n;++j)
+    {
+        pthread_join(thread[j], NULL);
+    }
+    //销毁读写锁
+    pthread_rwlock_destroy(&rwlock);
+    return 0;
+}
+```
+
+### 7. 条件变量
+#### 7.1 条件变量的概念
+条件本身不是锁！但它也可以造成线程阻塞。通常与互斥锁配合使用。给多线程提供一个会合的场所。
+
+- **使用条件变量可以使线程阻塞, 等待某个条件的发生, 当条件满足的时候解除阻塞.**
+
+条件变量的两个动作:
+- 条件不满足, 阻塞线程
+- 条件满足, 通知阻塞的线程解除阻塞, 开始工作.
+
+#### 7.2  pthread_cond_init----初始化条件变量
+定义一个条件变量：pthread_cond_t  cond;
+
+初始化条件变量：
+```cpp
+int pthread_cond_init(pthread_cond_t *restrict cond,
+               const pthread_condattr_t *restrict attr);
+```
+- 函数描述:初始化条件变量
+- 函数参数: 
+	- cond: 条件变量
+	- attr: 条件变量属性, 通常传NULL
+- 函数返回值:成功返回0, 失败返回错误号
+
+
+#### 7.3  pthread_cond_destroy----销毁条件变量
+- 函数描述: 销毁条件变量
+- 函数参数: 条件变量
+- 返回值: 成功返回0, 失败返回错误号
+
+
+#### 7.4  pthread_cond_wait----判断条件是否阻塞
+- 函数描述:
+ 	- **若收到pthread_cond_signal发送的信号, 解除线程阻塞, 并试图加互斥锁**
+	-  **若未收到pthread_cond_signal发送的信号, 引起线程阻塞并解互斥锁**
+- 函数参数:
+	- cond: 条件变量
+	- mutex: 互斥锁变量
+- 函数返回值: 成功返回0, 失败返回错误号
+
+#### 7.5  pthread_cond_signal----唤起阻塞线程
+- 函数描述: 唤醒至少一个阻塞在该条件变量上的线程
+- 函数参数: 条件变量
+- 函数返回值: 成功返回0, 失败返回错误号
+
+#### 7.6 条件变量的使用步骤
+互斥锁步骤：
+- 第一步：全局创建一个条件变量
+	- pthread_cond_t cond;
+- 第二步：在main函数中初始化条件变量
+	- pthread_cond_init(&cond, NULL);
+- 第三步：在生产者线程中调用: 
+	- pthread_cond_wait(&cond);---解除消费者的阻塞
+- 第四部：在消费者线程中调用
+	- pthread_cond_wait(&cond);---将消费者阻塞
+- 第四步：在main函数中释放条件变量
+	- pthread_cond_destroy(&mutex);
+
+#### 7.7 利用条件变量解决单生产者和单消费者代码案例
+生产者每次生产一个链表，消费者每次消费一个链表。（链表不带头节点）
+```cpp
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <pthread.h>
+#include <sys/types.h>
+
+//定义一把锁
+pthread_mutex_t mutex;
+//定义条件变量
+pthread_cond_t cond;
+//定义链表
+typedef struct node
+{
+    int data;
+    struct node * next;
+
+}NODE;
+
+NODE *head = NULL;
+
+void * producer(void*arg)
+{
+    NODE * pnode= NULL;
+    while(1)
+    {
+        //生产一个链表
+        pnode = (NODE *) malloc(sizeof(NODE));
+        pnode->data=rand()%1000;
+        //加锁
+        pthread_mutex_lock(&mutex);
+        pnode->next=head;
+        head=pnode;
+        printf("Producing---[%d]\n", head->data);
+        //解锁
+        pthread_mutex_unlock(&mutex);
+
+        //通知消费者线程解除阻塞
+        pthread_cond_signal(&cond);
+        sleep(rand()%2);
+
+    }
+}
+
+void * consumer(void*arg)
+{
+    NODE * pnode = NULL;
+    while(1)
+    {
+        //加锁
+        pthread_mutex_lock(&mutex);
+        if(head==NULL)
+        {
+            //如果头节点为空，则阻塞在此并解锁，直到生产者给出信号(被生成者线程调用pthread_cond_signal函数通知)，才唤醒并重新加锁
+            pthread_cond_wait(&cond, &mutex);
+        }
+        pnode=head;
+        head=head->next;
+        printf("Consuming---[%d]\n", pnode->data);
+        //解锁
+        pthread_mutex_unlock(&mutex);
+        free(pnode);
+        pnode=NULL;
+        sleep(rand()%2);
+    }
+}
+
+int main()
+{
+    int ret;
+    //初始化锁
+    pthread_mutex_init(&mutex, NULL);
+    //初始化条件变量
+    pthread_cond_init(&cond, NULL);
+
+    pthread_t pthread[2];
+
+    ret=pthread_create(&pthread[0], NULL, producer,NULL);
+    if(ret!=0)
+    {
+        printf("pthread_create error, [%s]\n", strerror(ret));
+        return -1;
+    }
+    ret=pthread_create(&pthread[1], NULL, consumer,NULL);
+    if(ret!=0)
+    {
+        printf("pthread_create error, [%s]\n", strerror(ret));
+        return -1;
+    }
+
+    //等待线程结束
+    pthread_join(pthread[0],NULL);
+    pthread_join(pthread[1],NULL);
+
+    //销毁锁
+    pthread_mutex_destroy(&mutex);
+    //销毁条件变量
+    pthread_cond_destroy(&cond);
+    return 1;
+}
+```
+
+#### 7.8 利用条件变量解决多个生产者和消费者代码案例
+分析：多个生产者和多个消费者如果还是使用上面的代码改成多线程，程序会崩掉。原因是：
+&emsp;&emsp; 假设生产者只生产了一个节点。通过pthread_cond_signal唤醒了两个消费者，于是两个消费者同时解除阻塞，但是此时只有一个消费者加锁成功，而另一个消费者此时又会被阻塞，但是这次的阻塞时阻塞在互斥锁上，而不是条件变量。当第一个消费者消费完并解锁后，head=NULL。此时第二个消费者就会加锁并获取head->data，但是这时head=NULL，所以系统会崩。
+
+解决办法 ：
+```
+在消费者中的这行代码把if改成while
+if(head==NULL)
+        {
+            pthread_cond_wait(&cond, &mutex);
+        }
+修改后：
+while(head==NULL)
+        {
+            pthread_cond_wait(&cond, &mutex);
+        }
+```
+具体代码如下：
+
+需求：生产者每次生产一个链表，消费者每次消费一个链表。（链表不带头节点）
+```cpp
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <pthread.h>
+#include <sys/types.h>
+
+//定义一把锁
+pthread_mutex_t mutex;
+//定义条件变量
+pthread_cond_t cond;
+//定义链表
+typedef struct node
+{
+    int data;
+    struct node * next;
+
+}NODE;
+
+NODE *head = NULL;
+
+void * producer(void * arg)
+{
+    NODE * pnode= NULL;
+    int i=*(int *)arg;
+    while(1)
+    {
+        //生产一个链表
+        pnode = (NODE *) malloc(sizeof(NODE));
+        pnode->data=rand()%1000;
+        //加锁
+        pthread_mutex_lock(&mutex);
+        pnode->next=head;
+        head=pnode;
+        printf("[%d]Producing---[%d]\n", i, head->data);
+        //解锁
+        pthread_mutex_unlock(&mutex);
+
+        //通知消费者线程解除阻塞
+        pthread_cond_signal(&cond);
+        sleep(rand()%2);
+
+    }
+}
+
+void * consumer(void * arg)
+{
+    NODE * pnode = NULL;
+    int i=*(int *)arg;
+    while(1)
+    {
+        //加锁
+        pthread_mutex_lock(&mutex);
+        while(head==NULL)//通常只需要一部分线程去做执行任务，所以其它的线程需要继续wait。所以这里改成while不要用if
+        {
+            //如果头节点为空，则阻塞在此并解锁，直到生产者给出信号(被生成者线程调用pthread_cond_signal函数通知)，才唤醒并重新加锁
+            pthread_cond_wait(&cond, &mutex);
+        }
+        pnode=head;
+        head=head->next;
+        printf("[%d]Consuming---[%d]\n", i, pnode->data);
+        //解锁
+        pthread_mutex_unlock(&mutex);
+        free(pnode);
+        pnode=NULL;
+        sleep(rand()%3);
+    }
+}
+
+int main()
+{
+    int ret;
+    int i;
+    int P_arr[5];
+    int C_arr[5];
+    //初始化锁
+    pthread_mutex_init(&mutex, NULL);
+    //初始化条件变量
+    pthread_cond_init(&cond, NULL);
+
+    pthread_t P_pthread[3];
+    pthread_t C_pthread[5];
+    //创造生产者
+    for(i=0;i<5;++i)
+    {
+        P_arr[i]=i;
+        ret=pthread_create(&P_pthread[i], NULL, producer,&P_arr[i]);
+        if(ret!=0)
+        {
+            printf("pthread_create error, [%s]\n", strerror(ret));
+            return -1;
+        }
+    }
+    //创造消费者
+    for(i=0;i<5;++i)
+    {
+        C_arr[i]=i;
+        ret=pthread_create(&C_pthread[i], NULL, consumer,&C_arr[i]);
+        if(ret!=0)
+        {
+            printf("pthread_create error, [%s]\n", strerror(ret));
+            return -1;
+        }
+    }
+
+    //等待线程结束
+    for(i=0;i<5;++i)
+    {
+        pthread_join(P_pthread[i],NULL);
+    }
+    for(i=0;i<5;++i)
+    {
+        pthread_join(C_pthread[i],NULL);
+    }
+
+
+    //销毁锁
+    pthread_mutex_destroy(&mutex);
+    //销毁条件变量
+    pthread_cond_destroy(&cond);
+    return 1;
+}
+```
