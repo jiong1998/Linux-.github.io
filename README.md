@@ -1,5 +1,9 @@
+
+
 # linux系统编程
 个人通过学习，手打了一份48000字的Linux系统编程的笔记，包含了【**文件IO、进程、进程间通信、信号、多线程、互斥**】等知识点，并给出了大量的代码案例对每个重要的知识点进行了代码演示，通过理论和实操的结合，更好的透析每个知识点，为后续的unix网络编程打下基础。
+
+本文内容较长，包含的知识点很多，建议使用Ctrl+f 来查找知识点来学习。
 
 
 注：本人运行环境mac/Ubuntu+clion+C99
@@ -391,6 +395,37 @@ flag |= O_NONBLOCK;//非阻塞
 fcntl(fd[0], F_SETFL, flags);
 
 ```
+
+### 9. stat/lstat函数----获取文件属性
+- 函数描述: 获取文件属性
+- 函数原型: 
+	- int stat(const char *pathname, struct stat *buf);
+    - int lstat(const char *pathname, struct stat *buf);
+- 函数返回值： 
+	- 成功返回 0
+	- 失败返回 -1
+
+buf为传出参数，具体如下所示
+```cpp
+struct stat {
+	    dev_t          st_dev;        //文件的设备编号
+	    ino_t           st_ino;        //节点
+	    mode_t         st_mode;      //文件的类型和存取的权限
+	    nlink_t         st_nlink;     //连到该文件的硬连接数目，刚建立的文件值为1
+	    uid_t           st_uid;       //用户ID
+	    gid_t           st_gid;       //组ID
+	    dev_t          st_rdev;      //(设备类型)若此文件为设备文件，则为其设备编号
+	    off_t          st_size;      //文件字节数(文件大小)
+	    blksize_t       st_blksize;   //块大小(文件系统的I/O 缓冲区大小)
+	    blkcnt_t        st_blocks;    //块数
+	    time_t         st_atime;     //最后一次访问时间
+	    time_t         st_mtime;     //最后一次修改时间
+	    time_t         st_ctime;     //最后一次改变时间(指属性)
+	};
+```
+stat函数和lstat函数的区别
+- 对于普通文件, 这两个函数没有区别, 是一样的.
+- 对于连接文件,调用lstat函数获取的是链接文件本身的属性信息; 而stat函数获取的是链接文件指向的文件的属性信息.
 
 # 第五章（进程）
 ## 1. 程序与进程
@@ -1720,6 +1755,7 @@ i=[4],thread_id=[6168260608]
 - 函数返回值
 	- 成功：0；
 	- 失败：错误号
+
 
 
 
